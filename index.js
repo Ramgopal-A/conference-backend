@@ -1,17 +1,84 @@
 require('dotenv').config();
 const express = require('express');
+const http = require('http'); 
+const { Server } = require('socket.io');
 const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 const app = express();
+// Create the HTTP server wrapping your Express app
+const server = http.createServer(app);
+
+// Initialize Socket.io with CORS enabled so Flutter can connect
+const io = new Server(server, {
+    cors: {
+        origin: "*", 
+        methods: ["GET", "POST"]
+    }
+});
 app.use(cors());
 app.use(express.json());
 
 // Connect to your PostgreSQL users database
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
+});
+
+// Socket.io Real-Time Chat Logic
+io.on('connection', (socket) => {
+    console.log(`🟢 New user connected via WebSockets: ${socket.id}`);
+
+    // 1. User joins a specific private chat room
+    socket.on('join_room', (conversationId) => {
+        socket.join(conversationId);
+        console.log(`👤 User joined conversation room: ${conversationId}`);
+    });
+
+    // 2. User sends a message
+    socket.on('send_message', async (data) => {
+        // We expect Flutter to send us these three pieces of info
+        const { conversationId, senderId, messageText } = data;
+
+        try {
+            // A. Save the message to the Neon database permanently
+            const insertQuery = `
+                INSERT INTO messages (conversation_id, sender_id, message) 
+                VALUES ($1, $2, $3) RETURNING *;
+            `;
+            const savedMessage = await pool.query(insertQuery, [conversationId, senderId, messageText]);
+
+            // B. Instantly broadcast the saved message to the other person in the room
+            io.to(conversationId).emit('receive_message', savedMessage.rows[0]);
+            
+        } catch (err) {
+            console.error("❌ Error saving live message:", err);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`🔴 User disconnected: ${socket.id}`);
+    });
+});
+
+// Fetch all past messages for a specific conversation
+app.get('/api/conversations/:conversationId/messages', async (req, res) => {
+    try {
+        const { conversationId } = req.params;
+        
+        const historyQuery = `
+            SELECT * FROM messages 
+            WHERE conversation_id = $1 
+            ORDER BY created_at ASC;
+        `;
+        const messages = await pool.query(historyQuery, [conversationId]);
+        
+        res.status(200).json(messages.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: "Failed to fetch message history" });
+    }
 });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_conference_key_2026';
@@ -157,7 +224,81 @@ app.get('/api/user/me', authenticateToken, async (req, res) => {
     }
 });
 
+// ==========================================
+// 4. START OR FETCH A 1-ON-1 CONVERSATION
+// ==========================================
+app.post('/api/conversations', authenticateToken, async (req, res) => {
+    const userId = req.user.userId; // The logged-in user
+    const { receiverId } = req.body; // The person they want to chat with
+
+    try {
+        // 1. Check if a chat room already exists between these two exact users
+        const checkQuery = `
+            SELECT c.id 
+            FROM conversations c
+            JOIN conversation_members m1 ON c.id = m1.conversation_id
+            JOIN conversation_members m2 ON c.id = m2.conversation_id
+            WHERE m1.user_id = $1 AND m2.user_id = $2;
+        `;
+        const existingChat = await pool.query(checkQuery, [userId, receiverId]);
+
+        if (existingChat.rows.length > 0) {
+            // Chat exists! Return the existing room ID so Flutter can connect
+            return res.json({ conversation_id: existingChat.rows[0].id });
+        }
+
+        // 2. No chat exists yet. Create a brand new conversation room.
+        const newConv = await pool.query(`INSERT INTO conversations DEFAULT VALUES RETURNING id`);
+        const conversationId = newConv.rows[0].id;
+
+        // 3. Add both users as members of this new room
+        const addMembersQuery = `
+            INSERT INTO conversation_members (conversation_id, user_id) 
+            VALUES ($1, $2), ($1, $3);
+        `;
+        await pool.query(addMembersQuery, [conversationId, userId, receiverId]);
+
+        res.status(201).json({ conversation_id: conversationId });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to start conversation' });
+    }
+});
+
+
+
+// ==========================================
+// 5. GET USER'S INBOX (List of all active chats)
+// ==========================================
+app.get('/api/conversations', authenticateToken, async (req, res) => {
+    const userId = req.user.userId;
+
+    try {
+        // Find all rooms the user is in, and grab the name/designation of the OTHER person in that room
+        const inboxQuery = `
+            SELECT 
+                c.id AS conversation_id,
+                u.id AS other_user_id,
+                u.full_name AS other_user_name,
+                u.designation
+            FROM conversations c
+            JOIN conversation_members cm ON c.id = cm.conversation_id
+            JOIN users u ON cm.user_id = u.id
+            WHERE c.id IN (
+                SELECT conversation_id FROM conversation_members WHERE user_id = $1
+            )
+            AND u.id != $1; -- Ensure we don't return the logged-in user's own details
+        `;
+        const inbox = await pool.query(inboxQuery, [userId]);
+        
+        res.json(inbox.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Failed to fetch inbox' });
+    }
+});
+
 
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 API running on port ${PORT}`));
+server.listen(PORT, () => console.log(`🚀 API running on port ${PORT}`));
