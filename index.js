@@ -299,6 +299,103 @@ app.get('/api/conversations', authenticateToken, async (req, res) => {
 });
 
 
+// ==========================================
+// GET THEMES (Hierarchical: Theme -> Subtheme -> Content)
+// ==========================================
+app.get('/api/themes', async (req, res) => {
+    try {
+        // Fetch all three layers
+        const themesData = await pool.query('SELECT * FROM tbl_theme');
+        const subthemesData = await pool.query('SELECT * FROM tbl_theme_subtheme ORDER BY display_order ASC');
+        const contentsData = await pool.query('SELECT * FROM tbl_theme_subtheme_content ORDER BY display_order ASC');
+
+        // Nest the data using JavaScript
+        const themes = themesData.rows.map(theme => {
+            return {
+                theme_id: theme.theme_id,
+                theme_name: theme.theme_name,
+                theme_desc: theme.theme_desc,
+                subthemes: subthemesData.rows
+                    .filter(sub => sub.theme_id === theme.theme_id)
+                    .map(sub => {
+                        return {
+                            subtheme_id: sub.subtheme_id,
+                            sub_theme_name: sub.sub_theme_name,
+                            contents: contentsData.rows.filter(content => content.subtheme_id === sub.subtheme_id)
+                        };
+                    })
+            };
+        });
+
+        res.json(themes);
+    } catch (err) {
+        console.error("Themes Error:", err.message);
+        res.status(500).json({ error: 'Failed to fetch themes' });
+    }
+});
+
+
+// ==========================================
+// GET KEYNOTE SPEAKERS
+// ==========================================
+app.get('/api/speakers', async (req, res) => {
+    try {
+        const speakers = await pool.query('SELECT * FROM keynote_speakers ORDER BY name ASC');
+        res.json(speakers.rows);
+    } catch (err) {
+        console.error("Speakers Error:", err.message);
+        res.status(500).json({ error: 'Failed to fetch speakers' });
+    }
+});
+
+// ==========================================
+// GET COMMITTEES
+// ==========================================
+app.get('/api/committees', async (req, res) => {
+    try {
+        const committees = await pool.query('SELECT * FROM committees ORDER BY display_order ASC');
+        res.json(committees.rows);
+    } catch (err) {
+        console.error("Committees Error:", err.message);
+        res.status(500).json({ error: 'Failed to fetch committees' });
+    }
+});
+
+// ==========================================
+// GET ACCOMMODATIONS (Hotels & Student)
+// ==========================================
+app.get('/api/accommodations', async (req, res) => {
+    try {
+        const hotels = await pool.query('SELECT * FROM accommodations ORDER BY created_at ASC');
+        const student = await pool.query('SELECT * FROM student_accommodations');
+        
+        // Group them into one response
+        res.json({
+            hotels: hotels.rows,
+            student_accommodation: student.rows[0] || null // Since there's only one student record
+        });
+    } catch (err) {
+        console.error("Accommodations Error:", err.message);
+        res.status(500).json({ error: 'Failed to fetch accommodations' });
+    }
+});
+
+// ==========================================
+// GET VENUE FACILITIES (Image Grid)
+// ==========================================
+app.get('/api/venues/facilities', async (req, res) => {
+    try {
+        const facilities = await pool.query('SELECT * FROM venue_facilities ORDER BY display_order ASC');
+        res.json(facilities.rows);
+    } catch (err) {
+        console.error("Venue Facilities Error:", err.message);
+        res.status(500).json({ error: 'Failed to fetch venue facilities' });
+    }
+});
+
+
+
+
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`🚀 API running on port ${PORT}`));
