@@ -154,51 +154,78 @@ app.get('/api/test', (req, res) => {
 });
 
 // ==========================================
-// 1. REGISTER (SIGN UP) ENDPOINT
+// 1.VISITOR REGISTRATION ENDPOINT
 // ==========================================
-app.post('/api/register', async (req, res) => {
-    // 1. Extract using 'phone' instead of 'phone_no'
-    const { 
-        full_name, 
-        email, 
-        password, 
-        confirm_password, 
-        phone, 
-        organization, 
-        designation, 
-        country 
+app.post('/api/register/visitor', async (req, res) => {
+    // 1. Extract all fields matching your Flutter UI
+    const {
+        category,
+        salutation,
+        full_name,
+        designation,
+        organization,
+        organization_address,
+        mobile_number,
+        email_address,
+        password,
+        confirm_password
     } = req.body;
 
     try {
+        // 2. Validate passwords match
         if (password !== confirm_password) {
             return res.status(400).json({ error: 'Passwords do not match!' });
         }
 
-        const userCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        if (userCheck.rows.length > 0) {
-            return res.status(400).json({ error: 'User already exists with this email' });
+        // 3. Check if a visitor with this email already exists
+        const visitorCheck = await pool.query('SELECT * FROM visitors WHERE email_address = $1', [email_address]);
+        if (visitorCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'A visitor already exists with this email address.' });
         }
 
+        // 4. Hash the password
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
 
-        // 2. Insert using 'phone' to match your database column perfectly
-        const newUser = await pool.query(
-            `INSERT INTO users (email, password_hash, full_name, phone, organization, designation, country) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, full_name`,
-            [email, passwordHash, full_name, phone, organization, designation, country]
+        // 5. Insert the new visitor into the database
+        const newVisitor = await pool.query(
+            `INSERT INTO visitors 
+            (category, salutation, full_name, designation, organization, organization_address, mobile_number, email_address, password_hash) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
+            RETURNING id, email_address, full_name, category`,
+            [
+                category, 
+                salutation, 
+                full_name, 
+                designation, 
+                organization, 
+                organization_address, 
+                mobile_number, 
+                email_address, 
+                passwordHash
+            ]
         );
 
-        const token = jwt.sign({ userId: newUser.rows[0].id }, JWT_SECRET, { expiresIn: '7d' });
-        
-        console.log(`✅ New user registered with full details: ${email}`);
-        res.status(201).json({ token, user: newUser.rows[0] });
+        // 6. Generate JWT token for immediate login after registration
+        const token = jwt.sign(
+            { id: newVisitor.rows[0].id, role: 'visitor' }, 
+            process.env.JWT_SECRET || 'your_fallback_secret', 
+            { expiresIn: '7d' }
+        );
+
+        console.log(`✅ New visitor registered: ${email_address}`);
+        res.status(201).json({ 
+            message: 'Visitor registered successfully',
+            token, 
+            visitor: newVisitor.rows[0] 
+        });
 
     } catch (err) {
-        console.error("Backend Error:", err.message);
-        res.status(500).json({ error: 'Registration failed' });
+        console.error("Backend Error during visitor registration:", err.message);
+        res.status(500).json({ error: 'Visitor registration failed. Please try again.' });
     }
 });
+
 
 // ==========================================
 // 2.GET ALL VENUES ENDPOINT
