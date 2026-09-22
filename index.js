@@ -3,13 +3,46 @@ const express = require('express');
 const http = require('http'); 
 const { Server } = require('socket.io');
 const cors = require('cors');
-const { Pool } = require('pg');
+
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 const app = express();
 // Create the HTTP server wrapping your Express app
 const server = http.createServer(app);
+
+
+// PostgreSQL connection setup(local setup)
+
+
+
+/*
+require('dotenv').config();
+const { Pool } = require('pg');
+
+// Setup for local PostgreSQL connection
+const pool = new Pool({
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT,
+    database: process.env.DB_NAME,
+});
+
+// Test the connection
+pool.connect((err, client, release) => {
+    if (err) {
+        return console.error('Error acquiring client', err.stack);
+    }
+    console.log('Successfully connected to local PostgreSQL database!');
+    release();
+});
+
+module.exports = pool;
+*/
+
+
+
 
 // Initialize Socket.io with CORS enabled so Flutter can connect
 const io = new Server(server, {
@@ -21,10 +54,15 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-// Connect to your PostgreSQL users database
+
+
+
+//PostgreSQL connection setup(online neon setup)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 });
+
+
 
 // Socket.io Real-Time Chat Logic
 io.on('connection', (socket) => {
@@ -163,7 +201,24 @@ app.post('/api/register', async (req, res) => {
 });
 
 // ==========================================
-// 2. LOGIN ENDPOINT
+// 2.GET ALL VENUES ENDPOINT
+// ==========================================
+app.get('/api/venues', async (req, res) => {
+    try {
+        // Fetch all columns and rows from the venues table
+        const result = await pool.query('SELECT * FROM venues');
+        
+        // Send the data back to the frontend
+        res.status(200).json(result.rows);
+    } catch (err) {
+        console.error("Backend Error fetching venues:", err.message);
+        res.status(500).json({ error: 'Failed to retrieve venues data' });
+    }
+});
+
+
+// ==========================================
+// 3. LOGIN ENDPOINT
 // ==========================================
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
@@ -193,7 +248,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ==========================================
-// 3. GET LOGGED-IN USER DETAILS (For the Pass Screen)
+// 4. GET LOGGED-IN USER DETAILS (For the Pass Screen)
 // ==========================================
 app.get('/api/user/me', authenticateToken, async (req, res) => {
     try {
@@ -225,7 +280,7 @@ app.get('/api/user/me', authenticateToken, async (req, res) => {
 });
 
 // ==========================================
-// 4. START OR FETCH A 1-ON-1 CONVERSATION
+// 5. START OR FETCH A 1-ON-1 CONVERSATION
 // ==========================================
 app.post('/api/conversations', authenticateToken, async (req, res) => {
     const userId = req.user.userId; // The logged-in user
@@ -268,7 +323,7 @@ app.post('/api/conversations', authenticateToken, async (req, res) => {
 
 
 // ==========================================
-// 5. GET USER'S INBOX (List of all active chats)
+// 6. GET USER'S INBOX (List of all active chats)
 // ==========================================
 app.get('/api/conversations', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
