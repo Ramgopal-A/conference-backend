@@ -154,10 +154,9 @@ app.get('/api/test', (req, res) => {
 });
 
 // ==========================================
-// 1.VISITOR REGISTRATION ENDPOINT
+// 1. VISITOR REGISTRATION ENDPOINT (Merged into Users Table)
 // ==========================================
 app.post('/api/register/visitor', async (req, res) => {
-    // 1. Extract all fields matching your Flutter UI
     const {
         category,
         salutation,
@@ -172,28 +171,27 @@ app.post('/api/register/visitor', async (req, res) => {
     } = req.body;
 
     try {
-        // 2. Validate passwords match
         if (password !== confirm_password) {
             return res.status(400).json({ error: 'Passwords do not match!' });
         }
 
-        // 3. Check if a visitor with this email already exists
-        const visitorCheck = await pool.query('SELECT * FROM visitors WHERE email_address = $1', [email_address]);
-        if (visitorCheck.rows.length > 0) {
-            return res.status(400).json({ error: 'A visitor already exists with this email address.' });
+        // Check against the 'users' table using the 'email' column
+        const userCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email_address]);
+        if (userCheck.rows.length > 0) {
+            return res.status(400).json({ error: 'A user already exists with this email address.' });
         }
 
-        // 4. Hash the password
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
 
-        // 5. Insert the new visitor into the database
-        const newVisitor = await pool.query(
-            `INSERT INTO visitors 
-            (category, salutation, full_name, designation, organization, organization_address, mobile_number, email_address, password_hash) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) 
-            RETURNING id, email_address, full_name, category`,
+        // Insert into users table. Hardcoding role as 'visitor'.
+        const newUser = await pool.query(
+            `INSERT INTO users 
+            (role, category, salutation, full_name, designation, organization, organization_address, phone, email, password_hash) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
+            RETURNING id, email, full_name, role`,
             [
+                'visitor', 
                 category, 
                 salutation, 
                 full_name, 
@@ -206,26 +204,21 @@ app.post('/api/register/visitor', async (req, res) => {
             ]
         );
 
-        // 6. Generate JWT token for immediate login after registration
-        const token = jwt.sign(
-            { id: newVisitor.rows[0].id, role: 'visitor' }, 
-            process.env.JWT_SECRET || 'your_fallback_secret', 
-            { expiresIn: '7d' }
-        );
+        // Sign token with userId to match your existing authenticateToken middleware
+        const token = jwt.sign({ userId: newUser.rows[0].id }, JWT_SECRET, { expiresIn: '7d' });
 
-        console.log(`✅ New visitor registered: ${email_address}`);
+        console.log(`✅ New visitor registered in users table: ${email_address}`);
         res.status(201).json({ 
             message: 'Visitor registered successfully',
             token, 
-            visitor: newVisitor.rows[0] 
+            user: newUser.rows[0] 
         });
 
     } catch (err) {
         console.error("Backend Error during visitor registration:", err.message);
-        res.status(500).json({ error: 'Visitor registration failed. Please try again.' });
+        res.status(500).json({ error: 'Visitor registration failed.' });
     }
 });
-
 
 // ==========================================
 // 2.GET ALL VENUES ENDPOINT
@@ -275,20 +268,16 @@ app.post('/api/login', async (req, res) => {
 });
 
 // ==========================================
-// 4. GET LOGGED-IN USER DETAILS (For the Pass Screen)
+// 4. GET LOGGED-IN USER DETAILS (For ALL Digital Passes)
 // ==========================================
 app.get('/api/user/me', authenticateToken, async (req, res) => {
     try {
-        // Because of the middleware, we now know exactly who this is!
-        // req.user.userId was securely decoded from their token.
         const userId = req.user.userId;
-
         console.log(`🎫 Fetching digital pass details for User ID: ${userId}`);
 
-        // Fetch ONLY this user from the database. 
-        // We explicitly list columns so we NEVER accidentally send the password_hash!
+        // Added category, salutation, and organization_address to the SELECT query
         const userResult = await pool.query(
-            `SELECT id, email, full_name, phone, organization, designation, country, role 
+            `SELECT id, email, full_name, phone, organization, designation, country, role, category, salutation, organization_address 
              FROM users WHERE id = $1`,
             [userId]
         );
@@ -297,7 +286,6 @@ app.get('/api/user/me', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'User not found in database.' });
         }
 
-        // Send the secure user profile back to Flutter
         res.json(userResult.rows[0]);
 
     } catch (err) {
@@ -306,88 +294,6 @@ app.get('/api/user/me', authenticateToken, async (req, res) => {
     }
 });
 
-// ==========================================
-// VISITOR LOGIN ENDPOINT
-// ==========================================
-app.post('/api/login/visitor', async (req, res) => {
-    const { email_address, password } = req.body;
-
-    try {
-        // 1. Find the visitor by email
-        const result = await pool.query('SELECT * FROM visitors WHERE email_address = $1', [email_address]);
-        
-        if (result.rows.length === 0) {
-            return res.status(404).json({ error: 'No visitor found with this email address.' });
-        }
-
-        const visitor = result.rows[0];
-
-        // 2. Compare the provided password with the stored hash
-        const validPassword = await bcrypt.compare(password, visitor.password_hash);
-        if (!validPassword) {
-            return res.status(401).json({ error: 'Invalid password.' });
-        }
-
-        // 3. Generate a JWT token
-        const token = jwt.sign(
-            { id: visitor.id, role: 'visitor' }, 
-            process.env.JWT_SECRET || 'your_fallback_secret', 
-            { expiresIn: '7d' }
-        );
-
-        console.log(`✅ Visitor logged in: ${email_address}`);
-        res.status(200).json({
-            message: 'Login successful',
-            token,
-            visitor: {
-                id: visitor.id,
-                full_name: visitor.full_name,
-                email_address: visitor.email_address
-            }
-        });
-
-    } catch (err) {
-        console.error("Backend Error during visitor login:", err.message);
-        res.status(500).json({ error: 'Login failed. Please try again.' });
-    }
-});
-
-// ==========================================
-// FETCH VISITOR PASS DETAILS
-// ==========================================
-app.get('/api/visitor/pass', async (req, res) => {
-    // 1. Extract the token from the Authorization header (Format: "Bearer <token>")
-    const token = req.header('Authorization')?.split(' ')[1];
-    
-    if (!token) {
-        return res.status(401).json({ error: 'Access denied. No authentication token provided.' });
-    }
-
-    try {
-        // 2. Verify the token and extract the visitor ID
-        const verified = jwt.verify(token, process.env.JWT_SECRET || 'your_fallback_secret');
-        const visitorId = verified.id;
-
-        // 3. Fetch only the data needed for the physical/digital pass
-        const passData = await pool.query(
-            `SELECT category, salutation, full_name, designation, organization 
-             FROM visitors 
-             WHERE id = $1`,
-            [visitorId]
-        );
-
-        if (passData.rows.length === 0) {
-            return res.status(404).json({ error: 'Visitor data not found.' });
-        }
-
-        // 4. Send the pass details to the frontend
-        res.status(200).json(passData.rows[0]);
-
-    } catch (err) {
-        console.error("Token verification or DB error:", err.message);
-        res.status(403).json({ error: 'Invalid or expired token.' });
-    }
-});
 
 // ==========================================
 // 5. START OR FETCH A 1-ON-1 CONVERSATION
