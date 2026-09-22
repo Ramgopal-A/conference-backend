@@ -307,6 +307,89 @@ app.get('/api/user/me', authenticateToken, async (req, res) => {
 });
 
 // ==========================================
+// VISITOR LOGIN ENDPOINT
+// ==========================================
+app.post('/api/login/visitor', async (req, res) => {
+    const { email_address, password } = req.body;
+
+    try {
+        // 1. Find the visitor by email
+        const result = await pool.query('SELECT * FROM visitors WHERE email_address = $1', [email_address]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'No visitor found with this email address.' });
+        }
+
+        const visitor = result.rows[0];
+
+        // 2. Compare the provided password with the stored hash
+        const validPassword = await bcrypt.compare(password, visitor.password_hash);
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Invalid password.' });
+        }
+
+        // 3. Generate a JWT token
+        const token = jwt.sign(
+            { id: visitor.id, role: 'visitor' }, 
+            process.env.JWT_SECRET || 'your_fallback_secret', 
+            { expiresIn: '7d' }
+        );
+
+        console.log(`✅ Visitor logged in: ${email_address}`);
+        res.status(200).json({
+            message: 'Login successful',
+            token,
+            visitor: {
+                id: visitor.id,
+                full_name: visitor.full_name,
+                email_address: visitor.email_address
+            }
+        });
+
+    } catch (err) {
+        console.error("Backend Error during visitor login:", err.message);
+        res.status(500).json({ error: 'Login failed. Please try again.' });
+    }
+});
+
+// ==========================================
+// FETCH VISITOR PASS DETAILS
+// ==========================================
+app.get('/api/visitor/pass', async (req, res) => {
+    // 1. Extract the token from the Authorization header (Format: "Bearer <token>")
+    const token = req.header('Authorization')?.split(' ')[1];
+    
+    if (!token) {
+        return res.status(401).json({ error: 'Access denied. No authentication token provided.' });
+    }
+
+    try {
+        // 2. Verify the token and extract the visitor ID
+        const verified = jwt.verify(token, process.env.JWT_SECRET || 'your_fallback_secret');
+        const visitorId = verified.id;
+
+        // 3. Fetch only the data needed for the physical/digital pass
+        const passData = await pool.query(
+            `SELECT category, salutation, full_name, designation, organization 
+             FROM visitors 
+             WHERE id = $1`,
+            [visitorId]
+        );
+
+        if (passData.rows.length === 0) {
+            return res.status(404).json({ error: 'Visitor data not found.' });
+        }
+
+        // 4. Send the pass details to the frontend
+        res.status(200).json(passData.rows[0]);
+
+    } catch (err) {
+        console.error("Token verification or DB error:", err.message);
+        res.status(403).json({ error: 'Invalid or expired token.' });
+    }
+});
+
+// ==========================================
 // 5. START OR FETCH A 1-ON-1 CONVERSATION
 // ==========================================
 app.post('/api/conversations', authenticateToken, async (req, res) => {
