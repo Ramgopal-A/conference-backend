@@ -63,6 +63,46 @@ const pool = new Pool({
 });
 
 
+const rateLimit = require('express-rate-limit');
+const { z } = require('zod');
+
+// ==========================================
+// SECURITY: RATE LIMITERS
+// ==========================================
+// Block IPs that make more than 10 login/register attempts in 15 minutes
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 10, 
+    message: { error: 'Too many attempts from this IP. Please try again after 15 minutes.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// ==========================================
+// SECURITY: ZOD VALIDATION SCHEMAS
+// ==========================================
+// Ensure all incoming visitor data matches strict rules before hitting the database
+const visitorRegistrationSchema = z.object({
+    category: z.string().max(50),
+    salutation: z.string().max(20),
+    full_name: z.string().min(2, "Name is too short").max(255),
+    designation: z.string().max(255).optional().nullable(),
+    organization: z.string().max(255).optional().nullable(),
+    organization_address: z.string().max(1000).optional().nullable(),
+    mobile_number: z.string().min(7, "Invalid mobile number").max(50),
+    email_address: z.string().email("Invalid email format").max(255),
+    password: z.string().min(6, "Password must be at least 6 characters").max(100),
+    confirm_password: z.string()
+}).refine((data) => data.password === data.confirm_password, {
+    message: "Passwords do not match!",
+    path: ["confirm_password"],
+});
+
+const loginSchema = z.object({
+    email: z.string().email("Invalid email format"),
+    password: z.string().min(1, "Password is required")
+});
+
 
 // Socket.io Real-Time Chat Logic
 io.on('connection', (socket) => {
@@ -154,69 +194,52 @@ app.get('/api/test', (req, res) => {
 });
 
 // ==========================================
-// 1. VISITOR REGISTRATION ENDPOINT (Merged into Users Table)
+// 1. VISITOR REGISTRATION ENDPOINT (Secured)
 // ==========================================
-app.post('/api/register/visitor', async (req, res) => {
-    const {
-        category,
-        salutation,
-        full_name,
-        designation,
-        organization,
-        organization_address,
-        mobile_number,
-        email_address,
-        password,
-        confirm_password
-    } = req.body;
-
+app.post('/api/register/visitor', authLimiter, async (req, res) => {
     try {
-        if (password !== confirm_password) {
-            return res.status(400).json({ error: 'Passwords do not match!' });
-        }
+        // 1. Validate incoming data with Zod
+        // If it fails, Zod automatically throws an error to the catch block
+        const validatedData = visitorRegistrationSchema.parse(req.body);
+        
+        const {
+            category, salutation, full_name, designation, organization, 
+            organization_address, mobile_number, email_address, password
+        } = validatedData;
 
-        // Check against the 'users' table using the 'email' column
+        // 2. Check against the 'users' table
         const userCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email_address]);
         if (userCheck.rows.length > 0) {
             return res.status(400).json({ error: 'A user already exists with this email address.' });
         }
 
+        // 3. Hash password and insert
         const salt = await bcrypt.genSalt(10);
         const passwordHash = await bcrypt.hash(password, salt);
 
-        // Insert into users table. Hardcoding role as 'visitor'.
         const newUser = await pool.query(
             `INSERT INTO users 
             (role, category, salutation, full_name, designation, organization, organization_address, phone, email, password_hash) 
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
             RETURNING id, email, full_name, role`,
             [
-                'visitor', 
-                category, 
-                salutation, 
-                full_name, 
-                designation, 
-                organization, 
-                organization_address, 
-                mobile_number, 
-                email_address, 
-                passwordHash
+                'visitor', category, salutation, full_name, designation, 
+                organization, organization_address, mobile_number, email_address, passwordHash
             ]
         );
 
-        // Sign token with userId to match your existing authenticateToken middleware
-        const token = jwt.sign({ userId: newUser.rows[0].id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: newUser.rows[0].id }, process.env.JWT_SECRET || 'your_fallback_secret', { expiresIn: '7d' });
 
-        console.log(`✅ New visitor registered in users table: ${email_address}`);
-        res.status(201).json({ 
-            message: 'Visitor registered successfully',
-            token, 
-            user: newUser.rows[0] 
-        });
+        console.log(`✅ Secured visitor registered: ${email_address}`);
+        res.status(201).json({ message: 'Registration successful', token, user: newUser.rows[0] });
 
     } catch (err) {
-        console.error("Backend Error during visitor registration:", err.message);
-        res.status(500).json({ error: 'Visitor registration failed.' });
+        // Catch Zod validation errors (e.g., bad email format, password too short)
+        if (err instanceof z.ZodError) {
+            return res.status(400).json({ error: err.errors[0].message });
+        }
+        console.error("Backend Error:", err.message);
+        res.status(500).json({ error: 'Registration failed.' });
     }
 });
 
@@ -238,12 +261,14 @@ app.get('/api/venues', async (req, res) => {
 
 
 // ==========================================
-// 3. LOGIN ENDPOINT
+// 3. LOGIN ENDPOINT (Secured)
 // ==========================================
-app.post('/api/login', async (req, res) => {
-    const { email, password } = req.body;
+app.post('/api/login', authLimiter, async (req, res) => {
     try {
-        console.log(`🔐 Login attempt for: ${email}`);
+        // Validate incoming data
+        const { email, password } = loginSchema.parse(req.body);
+
+        console.log(`🔐 Secured login attempt for: ${email}`);
         
         const userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (userResult.rows.length === 0) {
@@ -257,16 +282,19 @@ app.post('/api/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+        const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || 'your_fallback_secret', { expiresIn: '7d' });
         delete user.password_hash; 
         
         console.log(`✅ Login successful for: ${email}`);
         res.json({ token, user });
+
     } catch (err) {
+        if (err instanceof z.ZodError) {
+            return res.status(400).json({ error: err.errors[0].message });
+        }
         res.status(500).json({ error: 'Login failed' });
     }
 });
-
 // ==========================================
 // 4. GET LOGGED-IN USER DETAILS (For ALL Digital Passes)
 // ==========================================
@@ -369,6 +397,35 @@ app.get('/api/conversations', authenticateToken, async (req, res) => {
     }
 });
 
+// ==========================================
+// 7. DELETE ACCOUNT ENDPOINT 
+// ==========================================
+app.delete('/api/user/me', authenticateToken, async (req, res) => {
+    try {
+        // Extract the user ID from the verified JWT token
+        const userId = req.user.userId;
+
+        console.log(`🗑️ Deleting account for User ID: ${userId}`);
+
+        // Delete the user from the database
+        const deleteResult = await pool.query(
+            'DELETE FROM users WHERE id = $1 RETURNING id',
+            [userId]
+        );
+
+        // If no rows were affected, the user didn't exist
+        if (deleteResult.rowCount === 0) {
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        console.log(`✅ Account deleted successfully: ${userId}`);
+        res.status(200).json({ message: 'Account permanently deleted.' });
+
+    } catch (err) {
+        console.error("Delete Account Error:", err.message);
+        res.status(500).json({ error: 'Failed to delete account.' });
+    }
+});
 
 // ==========================================
 // GET THEMES (Hierarchical: Theme -> Subtheme -> Content)
