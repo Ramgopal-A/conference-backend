@@ -92,6 +92,9 @@ switch ($request_uri) {
         require_once 'api/data.php';
         getGenericData($pdo_conf, str_replace('/api/', '', $request_uri));
         break;
+    case '/api/fetch_details':
+        require_once 'api/fetch_details.php';
+        break;
     default:
         http_response_code(404);
         echo json_encode(["error" => "Route not found"]);
