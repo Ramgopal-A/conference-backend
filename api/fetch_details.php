@@ -3,7 +3,6 @@ require_once __DIR__ . '/../config/database.php';
 
 header('Content-Type: application/json');
 
-// Get registration number from URL parameters
 $registration_no = $_GET['registration_no'] ?? '';
 
 if (empty($registration_no)) {
@@ -12,31 +11,22 @@ if (empty($registration_no)) {
 }
 
 try {
-    // 1. Fetch from Registration Table Function
-    $stmt_reg = $pdo_moesnt->prepare("SELECT * FROM public.get_registration_detail(:reg_no)");
-    $stmt_reg->execute(['reg_no' => $registration_no]);
-    $registration = $stmt_reg->fetch(PDO::FETCH_ASSOC);
+    // Calls your single database function
+    $stmt = $pdo_moesnt->prepare("SELECT * FROM public.get_conference_details(:reg_no)");
+    $stmt->execute(['reg_no' => $registration_no]);
+    $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
-    // 2. Fetch from Payments Table Function
-    $stmt_pay = $pdo_moesnt->prepare("SELECT * FROM public.get_payment_detail(:reg_no)");
-    $stmt_pay->execute(['reg_no' => $registration_no]);
-    $payment = $stmt_pay->fetch(PDO::FETCH_ASSOC);
-
-    // 3. Fetch from Abstract Table Function
-    $stmt_abs = $pdo_moesnt->prepare("SELECT * FROM public.get_abstract_detail(:reg_no)");
-    $stmt_abs->execute(['reg_no' => $registration_no]);
-    $abstract = $stmt_abs->fetch(PDO::FETCH_ASSOC);
-
-    // Return combined JSON response
-    echo json_encode([
-        "success" => true,
-        "registration_no" => $registration_no,
-        "data" => [
-            "registration" => $registration ?: null,
-            "payment" => $payment ?: null,
-            "abstract" => $abstract ?: null
-        ]
-    ]);
+    if ($result) {
+        echo json_encode([
+            "success" => true,
+            "data" => $result
+        ]);
+    } else {
+        echo json_encode([
+            "success" => false,
+            "message" => "No records found for this registration number."
+        ]);
+    }
 
 } catch (PDOException $e) {
     echo json_encode([
