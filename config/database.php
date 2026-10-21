@@ -30,8 +30,8 @@ try {
 
 // --- OPTION B: ONLINE NEON DATABASES (PRODUCTION) ---
 // Replace the URLs below with your actual Neon connection strings
-$neon_conf_url  = "postgresql://neondb_owner:YOUR_PASSWORD@ep-xxx.aws.neon.tech/conference_db?sslmode=require&channel_binding=require";
-$neon_moesnt_url = "postgresql://neondb_owner:YOUR_PASSWORD@ep-xxx.aws.neon.tech/moesnt?sslmode=require&channel_binding=require";
+$neon_conf_url  = "postgresql://neondb_owner:npg_RGyQ0MKTXvZ7@ep-calm-water-azwktyt1-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+$neon_moesnt_url = "postgresql://neondb_owner:npg_RGyQ0MKTXvZ7@ep-calm-water-azwktyt1-pooler.c-3.ap-southeast-1.aws.neon.tech/moesnt?sslmode=require&channel_binding=require";
 
 try {
     // Neon App Database (`conference_db`)
