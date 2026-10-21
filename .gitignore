@@ -1,2 +1,13 @@
-node_modules/
+# Environment files (NEVER commit secrets or passwords!)
 .env
+
+# IDE and Editor files
+.vscode/
+.idea/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Dependencies (in case you add Composer later)
+vendor/
