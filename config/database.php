@@ -27,11 +27,12 @@ try {
 }
 */
 
+// ==========================================
+// ONLINE NEON DATABASES (PRODUCTION & LOCAL)
+// ==========================================
 
-// --- OPTION B: ONLINE NEON DATABASES (PRODUCTION) ---
-// Replace the URLs below with your actual Neon connection strings
-$neon_conf_url  = "postgresql://neondb_owner:npg_RGyQ0MKTXvZ7@ep-calm-water-azwktyt1-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
-$neon_moesnt_url = "postgresql://neondb_owner:npg_RGyQ0MKTXvZ7@ep-calm-water-azwktyt1-pooler.c-3.ap-southeast-1.aws.neon.tech/moesnt?sslmode=require&channel_binding=require";
+$neon_conf_url  = "postgresql://neondb_owner:npg_RGyQ0MKTXvZ7@ep-calm-water-azwktyt1-pooler.c-3.ap-southeast-1.aws.neon.tech/neondb?sslmode=require";
+$neon_moesnt_url = "postgresql://neondb_owner:npg_RGyQ0MKTXvZ7@ep-calm-water-azwktyt1-pooler.c-3.ap-southeast-1.aws.neon.tech/moesnt?sslmode=require";
 
 try {
     // Neon App Database (`conference_db`)
@@ -39,7 +40,8 @@ try {
     $dsn_conf = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=require", $conf_db["host"], $conf_db["port"] ?? 5432, ltrim($conf_db["path"], "/"));
     $pdo_conf = new PDO($dsn_conf, $conf_db["user"], $conf_db["pass"], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => true
     ]);
 
     // Neon Registration Database (`moesnt`)
@@ -47,7 +49,8 @@ try {
     $dsn_moesnt = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=require", $moesnt_db["host"], $moesnt_db["port"] ?? 5432, ltrim($moesnt_db["path"], "/"));
     $pdo_moesnt = new PDO($dsn_moesnt, $moesnt_db["user"], $moesnt_db["pass"], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => true
     ]);
 } catch (PDOException $e) {
     die(json_encode(["error" => "Neon Connection failed: " . $e->getMessage()]));
