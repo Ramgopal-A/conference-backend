@@ -1,0 +1,7 @@
+{
+    "name": "iwa/conference-backend",
+    "type": "project",
+    "require": {
+        "chillerlan/php-qrcode": "*"
+    }
+}

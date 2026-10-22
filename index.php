@@ -95,6 +95,9 @@ switch ($request_uri) {
     case '/api/fetch_details':
         require_once 'api/fetch_details.php';
         break;
+    case '/api/pass/qrcode':
+        require_once 'api/qrcode.php';
+        break;
     default:
         http_response_code(404);
         echo json_encode(["error" => "Route not found"]);

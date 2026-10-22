@@ -1,15 +1,19 @@
 FROM php:8.2-cli
 
-# Install PostgreSQL extensions for PHP
-RUN apt-get update && apt-get install -y libpq-dev \
-    && docker-php-ext-install pdo pdo_pgsql
-
 WORKDIR /var/www/html
 
-COPY . .
+# Install system dependencies, PostgreSQL extensions, and Composer
+RUN apt-get update && apt-get install -y libpq-dev git unzip \
+    && docker-php-ext-install pdo pdo_pgsql gd \
+    && curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Render assigns a dynamic port via the PORT environment variable
+# Copy project files
+COPY . /var/www/html
+
+# Install PHP dependencies via Composer
+RUN composer install --no-dev --optimize-autoloader
+
+# Render assigns a dynamic port via $PORT
 EXPOSE 10000
 
-# Start PHP built-in server bound to Render's required host and port
-CMD ["php", "-S", "0.0.0.0:10000", "index.php"]
+CMD ["sh", "-c", "php -S 0.0.0.0:${PORT:-10000} index.php"]
