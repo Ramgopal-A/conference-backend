@@ -36,7 +36,7 @@ $neon_moesnt_url = "postgresql://neondb_owner:npg_RGyQ0MKTXvZ7@ep-calm-water-azw
 try {
     // Neon App Database (`conference_db`)
     $conf_db = parse_url($neon_conf_url);
-    $dsn_conf = sprintf("pgsql:host=\%s;port=\%s;dbname=\%s;sslmode=require", $conf_db["host"], $conf_db["port"] ?? 5432, ltrim($conf_db["path"], "/"));
+    $dsn_conf = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=require", $conf_db["host"], $conf_db["port"] ?? 5432, ltrim($conf_db["path"], "/"));
     $pdo_conf = new PDO($dsn_conf, $conf_db["user"], $conf_db["pass"], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
@@ -44,7 +44,7 @@ try {
 
     // Neon Registration Database (`moesnt`)
     $moesnt_db = parse_url($neon_moesnt_url);
-    $dsn_moesnt = sprintf("pgsql:host=\%s;port=\%s;dbname=\%s;sslmode=require", $moesnt_db["host"], $moesnt_db["port"] ?? 5432, ltrim($moesnt_db["path"], "/"));
+    $dsn_moesnt = sprintf("pgsql:host=%s;port=%s;dbname=%s;sslmode=require", $moesnt_db["host"], $moesnt_db["port"] ?? 5432, ltrim($moesnt_db["path"], "/"));
     $pdo_moesnt = new PDO($dsn_moesnt, $moesnt_db["user"], $moesnt_db["pass"], [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
