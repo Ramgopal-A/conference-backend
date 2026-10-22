@@ -12,7 +12,7 @@ if (empty($registration_no)) {
 
 try {
     // Calls your single database function
-    $stmt = $pdo_moesnt->prepare("SELECT * FROM public.get_conference_details(:reg_no)");
+    $stmt = $pdo_moesnt->prepare("SELECT * FROM public.get_conference_details(:reg_no::VARCHAR)");
     $stmt->execute(['reg_no' => $registration_no]);
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
 
