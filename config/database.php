@@ -1,29 +1,34 @@
 <?php
+/*
 // ==========================================
 // CHOOSE YOUR ENVIRONMENT BY COMMENTING/UNCOMMENTING
 // ==========================================
 
-/*
-// --- OPTION A: LOCAL DEBUGGING DATABASES ---
-$host = "127.0.0.1";
-$port = "5432";
-$user = "postgres";
-$password = ""; // Your local password
+
+$host = getenv('DB_HOST') ?: 'localhost';
+$port = getenv('DB_PORT') ?: '5432';
+$user = getenv('DB_USER') ?: 'postgres';
+$pass = getenv('DB_PASSWORD') ?: '';
 
 try {
-    // Local App Database
-    $pdo_conf = new PDO("pgsql:host=$host;port=$port;dbname=conference_db", $user,$password, [
+    // 1. Connection for conference_db
+    $db_conf = getenv('DB_NAME_CONF') ?: 'conference_db';
+    $pdo_conf = new PDO("pgsql:host=$host;port=$port;dbname=$db_conf;", $user, $pass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
 
-    // Local Registration Database
-    $pdo_moesnt = new PDO("pgsql:host=$host;port=$port;dbname=moesnt", $user,$password, [
+    // 2. Connection for moesnt database
+    $db_moesnt = getenv('DB_NAME_MOESNT') ?: 'moesnt';
+    $pdo_moesnt = new PDO("pgsql:host=$host;port=$port;dbname=$db_moesnt;", $user, $pass, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     ]);
+
 } catch (PDOException $e) {
-    die(json_encode(["error" => "Local Connection failed: " . $e->getMessage()]));
+    http_response_code(500);
+    echo json_encode(["error" => "Database connection failed: " . $e->getMessage()]);
+    exit;
 }
 */
 
@@ -55,4 +60,5 @@ try {
 } catch (PDOException $e) {
     die(json_encode(["error" => "Neon Connection failed: " . $e->getMessage()]));
 }
+    
 ?>
