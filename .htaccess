@@ -1,7 +1,23 @@
+# 1. Enable Rewrite Engine
 <IfModule mod_rewrite.c>
     RewriteEngine On
-    
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteBase /IWA2026MobileApp/api/
+
+    # CRITICAL: Preserve Authorization header for JWT tokens
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # If the file or directory exists directly (like login.php, chat.php, etc.), serve it as-is
+    RewriteCond %{REQUEST_FILENAME} -f [OR]
+    RewriteCond %{REQUEST_FILENAME} -d
+    RewriteRule ^ - [L]
+
+    # Otherwise route to index.php
     RewriteRule ^(.*)$ index.php [QSA,L]
+</IfModule>
+
+# 2. CORS Headers Fallback (Applies to all incoming requests)
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, Accept, X-Requested-With, Origin"
 </IfModule>

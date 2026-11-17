@@ -2,6 +2,11 @@
     "name": "iwa/conference-backend",
     "type": "project",
     "require": {
-        "chillerlan/php-qrcode": "*"
+        "chillerlan/php-qrcode": "4.4"
+    },
+    "config": {
+        "platform": {
+            "php": "7.4.33"
+        }
     }
 }

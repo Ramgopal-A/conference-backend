@@ -1,16 +1,27 @@
 <?php
+// api/qrcode.php - Standalone QR Code Generation File (PHP 7.4 Compatible)
+
 ob_start();
+
+header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: GET, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(200);
+    exit;
+}
+
 require_once __DIR__ . '/../vendor/autoload.php';
 
 use chillerlan\QRCode\QRCode;
 use chillerlan\QRCode\QROptions;
 
-// Clear any accidental prior output buffers
 while (ob_get_level() > 1) {
     ob_end_clean();
 }
 
-$qid = $_GET['qid'] ?? $_GET['registration_no'] ?? '';
+$qid = trim($_GET['qid'] ?? $_GET['registration_no'] ?? '');
 
 if (empty($qid)) {
     ob_clean();
@@ -22,10 +33,11 @@ if (empty($qid)) {
 
 try {
     $options = new QROptions([
-        'version'      => -1,
-        'eccLevel'     => 'Q',
-        'scale'        => 10,
-        'outputBase64' => false, // Crucial for v6: prevents base64 wrapping and returns raw SVG markup
+        'version'     => QRCode::VERSION_AUTO,
+        'outputType'  => QRCode::OUTPUT_MARKUP_SVG,
+        'eccLevel'    => QRCode::ECC_Q,
+        'scale'       => 10,
+        'imageBase64' => false,
     ]);
 
     $qrcode = new QRCode($options);
@@ -47,8 +59,8 @@ try {
     header('Content-Type: application/json');
     echo json_encode([
         "error_message" => $ex->getMessage(),
-        "file" => $ex->getFile(),
-        "line" => $ex->getLine()
+        "file"          => $ex->getFile(),
+        "line"          => $ex->getLine()
     ]);
     exit;
 }
